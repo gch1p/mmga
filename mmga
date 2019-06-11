@@ -1,0 +1,577 @@
+#!/bin/bash
+#
+# mmga: Make MacBook Great Again
+#
+# Copyright (C) 2019 Evgeny Zinoviev <me@ch1p.io>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation; version 2 of
+# the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+set -e
+trap 'onerror ${LINENO}' ERR
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+. $DIR/config.inc
+
+VERSION="0.1"
+WORK_DIR="$DIR/work"
+
+CBOL=$(tput bold)
+CRST=$(tput sgr0)
+CRED=$(tput setaf 1)
+CGRN=$(tput setaf 2)
+CYAN=$(tput setaf 6)
+
+declare -A BOARD_REFS=(
+    [macbookair5_2]="refs/changes/04/32604/22"
+    [macbookpro8_1]="refs/changes/51/33151/3"
+    [macbookpro10_1]="refs/changes/73/32673/22"
+)
+
+onerror() {
+    local parent_lineno="$1"
+    local message="$2"
+    local code="${3:-1}"
+
+    echo "${CRED}${CBOL}caught error on line $parent_lineno${CRST}"
+    if [ ! -z "$message" ]; then
+        echo "${CRED}$message${CRST}"
+    fi
+    echo "exiting with code $code"
+    exit $code
+}
+
+echoerr() {
+    echo "${CRED}${CBOL}ERROR: $@${CRST}" 1>&2
+}
+
+echoinf() {
+    echo "${CGRN}$@${CRST}"
+}
+
+echotitle() {
+    echo "${CGRN}>> ${CBOL}$@${CRST}"
+}
+
+strrepeat() {
+    local str="$1"
+    local n="$2"
+    for i in {1..80}; do
+        echo -n "$str"
+    done
+}
+
+validate_model() {
+    if [ -z "$MODEL" ]; then
+        echoerr "MODEL is not set."
+        exit 1
+    elif [ ! -f "$DIR/config/$MODEL" ]; then
+        echoerr "Model \"$MODEL\" is not supported"
+        exit 1
+    fi
+}
+
+validate_payload() {
+    case "$PAYLOAD" in
+        grub)
+            if [ ! -z "$GRUB_CFG_PATH" ] && [ ! -f "$GRUB_CFG_PATH" ]; then
+                echoerr "GRUB_CFG_PATH: $GRUB_CFG_PATH not found"
+                exit 1
+            fi
+            ;;
+        seabios)
+            ;;
+        *)
+            echoerr "Unknown payload \"$PAYLOAD\""
+            exit 1
+            ;;
+    esac
+}
+
+# $1: config variable name
+# $2: executable path
+validate_executable() {
+    local var="$1"
+    local path="$2"
+    if [ ! -x "$path" ]; then
+        echoerr "$var: \"$path\" not found"
+        exit 1
+    fi
+}
+
+validate_coreboot_path() {
+    if [ -z "$COREBOOT_PATH" ]; then
+        echoerr "COREBOOT_PATH is not set."
+        exit 1
+    elif [ ! -d "$COREBOOT_PATH" ]; then
+        echoerr "COREBOOT_PATH: \"$COREBOOT_PATH\" not found"
+        exit 1
+    fi
+}
+
+# $1: working directory
+# $2: layout file
+# $3: label
+patch_ifd() {
+    local dir="$1"
+    local layout="$2"
+    local label="$3"
+
+    if [ ! -f "$WORK_DIR/oem/dump.bin" ]; then
+        echoerr "Original dump \"$WORK_DIR/oem/dump.bin\" doesn't exists"
+        exit 1
+    fi
+
+    mkdir_new "$dir"
+
+    echotitle "Updating FD layout for $label..."
+    pushd "$WORK_DIR/oem" >/dev/null
+    if [ -f dump.bin.new ]; then
+        rm dump.bin.new
+    fi
+    $IFDTOOL -n "$layout" dump.bin
+    if [ ! -f dump.bin.new ]; then
+        echoerr "dump.bin.new doesn't exists, something's wrong"
+        exit 1
+    fi
+    popd >/dev/null
+
+    echotitle "Extracting FD modules for $label..."
+    pushd "$dir" >/dev/null
+    mv "$WORK_DIR/oem/dump.bin.new" .
+    $IFDTOOL -x dump.bin.new
+    rm flashregion_1_bios.bin
+    popd >/dev/null
+}
+
+prepare_config_stage1() {
+    local file="$WORK_DIR/config"
+    cp "$DIR/config/$MODEL" "$file"
+    config_write_common "$file"
+    echo "CONFIG_IFD_BIN_PATH=\"$WORK_DIR/stage1/flashregion_0_flashdescriptor.bin\"" >> "$file"
+    echo "CONFIG_ME_BIN_PATH=\"$WORK_DIR/stage1/flashregion_2_intel_me.bin\"" >> "$file"
+    echo "CONFIG_COREBOOT_ROMSIZE_KB_1024=y" >> "$file"
+    echo "CONFIG_CBFS_SIZE=0xd0000" >> "$file"
+    config_write_payload "$file"
+}
+
+prepare_config_stage2() {
+    local file="$WORK_DIR/config"
+    cp "$DIR/config/$MODEL" "$file"
+    config_write_common "$file"
+    if [[ "$STAGE2_USE_FULL_ME" == "1" ]]; then
+        # use OEM FD and ME
+        echo "CONFIG_IFD_BIN_PATH=\"$WORK_DIR/oem/flashregion_0_flashdescriptor.bin\"" >> "$file"
+        echo "CONFIG_ME_BIN_PATH=\"$WORK_DIR/oem/flashregion_2_intel_me.bin\"" >> "$file"
+    else
+        echo "CONFIG_IFD_BIN_PATH=\"$WORK_DIR/stage2/flashregion_0_flashdescriptor.bin\"" >> "$file"
+        # use neutered ME from stage1
+        echo "CONFIG_ME_BIN_PATH=\"$WORK_DIR/stage1/flashregion_2_intel_me.bin\"" >> "$file"
+    fi
+    echo "CONFIG_CBFS_SIZE=0x500000" >> "$file"
+    config_write_payload "$file"
+}
+
+config_write_common() {
+    local file="$1"
+    echo "CONFIG_HAVE_IFD_BIN=y" >> "$file"
+    echo "CONFIG_HAVE_ME_BIN=y" >> "$file"
+}
+
+config_write_payload() {
+    local file="$1"
+    if [ -f "$WORK_DIR/$PAYLOAD.elf" ]; then
+        echo "CONFIG_PAYLOAD_ELF=y" >> "$file"
+        echo "CONFIG_PAYLOAD_FILE=\"$WORK_DIR/$PAYLOAD.elf\"" >> "$file"
+    else
+        if [ "$PAYLOAD" == "grub" ]; then
+            echo "CONFIG_PAYLOAD_GRUB2=y" >> "$file"
+        elif [ "$PAYLOAD" == "seabios" ]; then
+            echo "CONFIG_PAYLOAD_SEABIOS=y" >> "$file"
+            echo "CONFIG_SEABIOS_REVISION=y" >> "$file"
+            echo "CONFIG_SEABIOS_REVISION_ID=\"macbook-fix\"" >> "$file"
+        fi
+    fi
+}
+
+postbuild_cbfs_add() {
+    if [[ "$PAYLOAD" == "grub" ]]; then
+        echotitle "Adding grub.cfg..."
+        $CBFSTOOL "$COREBOOT_PATH/build/coreboot.rom" add \
+            -t raw -n etc/grub.cfg -f "$(get_grub_cfg)"
+    fi
+}
+
+flash() {
+    local rom="$1"
+    local layout="$2"
+
+    fd_modules=(fd me bios)
+    for m in "${fd_modules[@]}"; do
+        echotitle "Flashing $m..."
+        sudo $FLASHROM $FLASHROM_ARGS \
+            -p internal:laptop=force_I_want_a_brick \
+            -w "$rom" -l "$layout" -i $m -N
+    done
+}
+
+coreboot_check_board() {
+    pushd "$COREBOOT_PATH" >/dev/null
+    if [ ! -d src/mainboard/apple/$MODEL ]; then
+        echoerr "Tree for $MODEL not found. Forgot to run fetch?"
+        exit 1
+    fi
+    popd >/dev/null
+}
+
+patch_seabios() {
+    if [[ "$PAYLOAD" != "seabios" ]]; then
+        return
+    fi
+    pushd "$COREBOOT_PATH/payloads/external/SeaBIOS" >/dev/null
+    echotitle "Patching SeaBIOS..."
+    make seabios
+    cd seabios
+    if [ $(git branch --list macbook-fix) ]; then
+        echotitle "SeaBIOS patch already in place, skipping..."
+        popd >/dev/null
+        return
+    fi
+    git checkout -b macbook-fix
+    patch -p1 < "$DIR/seabios-macbook-fix.patch"
+    git commit -am "Fix MacBook USB keyboard" --no-verify
+    popd >/dev/null
+}
+
+get_grub_cfg() {
+    if [ -z "$GRUB_CFG_PATH" ]; then
+        echo "$DIR/grub.cfg"
+    else
+        echo "$GRUB_CFG_PATH"
+    fi
+}
+
+get_stage2_layout() {
+    if [[ "$STAGE2_USE_FULL_ME" == "1" ]]; then
+        echo "$WORK_DIR/oem/layout.txt"
+    else
+        echo "$DIR/layout-stage2.txt"
+    fi
+}
+
+# $1: layout file
+# $2: region name
+get_layout_region() {
+    local layout="$1"
+    local reg="$2"
+    if [ ! -f "$layout" ]; then
+        echoerr "get_layout_region: file $layout doesn't exists"
+        1
+    fi
+    echo 0x$(cat "$layout" | grep $reg | cut -f 1 -d " " | sed 's/:/-0x/')
+}
+
+mkdir_in() {
+    # mkdir if needed
+    if [ ! -d "$1" ]; then
+        mkdir "$1"
+    fi
+}
+
+mkdir_new() {
+    # rm -rf if needed, then mkdir
+    if [ -d "$1" ]; then
+        rm -rf "$1"
+    fi
+    mkdir "$1"
+}
+
+show_help() {
+    echo "${CBOL}mmga $VERSION: Make MacBook Great Again!${CRST}
+
+This is a tool to help automate coreboot flashing process on
+Apple MacBooks without using external SPI programmer.
+
+This is a free software provided as is WITHOUT ANY WARRANTY. The
+developer(s) are not responsible for bricked laptops, lost data or
+anything else. You take the risk and you are responsible for what
+you do with your MacBook.
+
+Before you start, please read the README twice to understand what
+this tool does.
+
+${CBOL}Usage:${CRST}
+    ${0} <options> ACTION
+
+${CBOL}Options:${CRST}
+    -h, --help: show this help
+
+${CBOL}stage1 actions:${CRST}
+              dump: dump flash content
+             fetch: fetch board tree from Gerrit if needed
+    prepare-stage1: patch IFD, neutralize and truncate ME
+     config-stage1: make coreboot config (for manual use)
+      build-stage1: make config and build ROM (for auto use)
+      flash-stage1: flash ROM (\$COREBOOT_PATH/build/coreboot.rom)
+
+${CBOL}stage2 actions:${CRST}
+    prepare-stage2: patch IFD if needed
+     config-stage2: make coreboot config (for manual use)
+      build-stage2: make config and build ROM (for auto use)
+      flash-stage2: flash ROM (\$COREBOOT_PATH/build/coreboot.rom)
+
+${CBOL}other actions:${CRST}
+         flash-oem: flash OEM firmware back
+"
+}
+
+if [ "$#" -lt 1 ]; then
+    show_help
+    exit
+fi
+
+mkdir_in "$WORK_DIR"
+
+while test $# -gt 0; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit
+            ;;
+        -*)
+            echoerr "Unrecognized option $1"
+            shift
+            ;;
+        *)
+            ACTION="$1"
+            shift
+            ;;
+    esac
+done
+
+validate_payload
+validate_model
+validate_coreboot_path
+
+VALIDATE=(FLASHROM IFDTOOL CBFSTOOL ME_CLEANER)
+for var in ${VALIDATE[@]}; do
+    validate_executable $var "${!var}"
+done
+
+case "$ACTION" in
+    dump)
+        mkdir_new "$WORK_DIR/oem"
+
+        echotitle "Dumping flash chip..."
+        sudo $FLASHROM $FLASHROM_ARGS \
+            -p internal:laptop=force_I_want_a_brick \
+            -r "$WORK_DIR/oem/dump.bin"
+        echoinf "Successfully saved to ${CBOL}$WORK_DIR/oem/dump.bin${CRST}"
+
+        echotitle "Dumping layout..."
+        pushd "$WORK_DIR/oem" >/dev/null
+        $IFDTOOL -f "$WORK_DIR/oem/layout.txt" "$WORK_DIR/oem/dump.bin"
+        cat "$WORK_DIR/oem/layout.txt"
+
+        echotitle "Extracting OEM modules..."
+        $IFDTOOL -x dump.bin
+        popd >/dev/null
+        ;;
+
+    fetch)
+        if [ ! -d "$COREBOOT_PATH/src/mainboard/apple/$MODEL" ]; then
+            pushd "$COREBOOT_PATH" >/dev/null
+            branch=$(git rev-parse --abbrev-ref HEAD)
+            if [ -z "$BOARD_REFS[$MODEL]" ]; then
+                echoerr "refs for $MODEL not found"
+                exit 1
+            fi
+            if [[ "$branch" != "master" ]]; then
+                echotitle "Switching to master..."
+                git checkout master
+            fi
+            if [ $(git branch --list $MODEL) ]; then
+                echotitle "Branch $MODEL already exists, trying to delete it..."
+                git branch -d $MODEL
+            fi
+            echotitle "Fetching $MODEL..."
+            git fetch "https://review.coreboot.org/coreboot" ${BOARD_REFS[$MODEL]} && git checkout FETCH_HEAD
+            echotitle "Creating branch $MODEL..."
+            git checkout -b $MODEL
+            if [ ! -d "$COREBOOT_PATH/src/mainboard/apple/$MODEL" ]; then
+                echoerr "Tree for $MODEL still doesn't exists, something's wrong"
+                exit 1
+            fi
+            popd >/dev/null
+            echotitle "Done"
+        else
+            echo "Nothing to fetch, you already have tree for $MODEL."
+        fi
+        ;;
+
+    prepare-stage1)
+        patch_ifd "$WORK_DIR/stage1" "$DIR/layout-stage1.txt" stage1
+
+        echotitle "Neutralizing and truncating ME..."
+        $ME_CLEANER -t -r \
+            -O "$WORK_DIR/stage1/flashregion_2_intel_me.bin" \
+            "$WORK_DIR/oem/flashregion_2_intel_me.bin"
+
+        size=$(stat --printf="%s" "$WORK_DIR/stage1/flashregion_2_intel_me.bin")
+        if [ "$size" -gt 131072 ]; then
+            echoerr "Truncated ME is still larger than 128K ($size bytes). This is not OK, do not continue."
+            exit 1
+        fi
+        ;;
+
+    config-stage1)
+        prepare_config_stage1
+        echoinf "Config saved to ${CBOL}$WORK_DIR/config${CRST}"
+        ;;
+
+    build-stage1)
+        prepare_config_stage1
+        coreboot_check_board
+
+        pushd "$COREBOOT_PATH" >/dev/null
+        make distclean
+
+        patch_seabios
+
+        echotitle "Building coreboot..."
+        cp "$WORK_DIR/config" "$COREBOOT_PATH/.config"
+        make olddefconfig
+        make
+        postbuild_cbfs_add
+
+        echotitle "Extracting $PAYLOAD.elf to reuse it in future..."
+        $CBFSTOOL build/coreboot.rom extract -m x86 -n fallback/payload \
+            -f "$WORK_DIR/$PAYLOAD.elf"
+
+        popd >/dev/null
+        ;;
+
+    flash-stage1)
+        if [ -f "$WORK_DIR/stage1.rom" ]; then
+            rm "$WORK_DIR/stage1.rom"
+        fi
+        cp "$COREBOOT_PATH/build/coreboot.rom" "$WORK_DIR/stage1.rom.tmp"
+        dd if=/dev/zero of="$WORK_DIR/7mb.bin" bs=1024 count=7168 2>/dev/null
+        cat "$WORK_DIR/stage1.rom.tmp" "$WORK_DIR/7mb.bin" > "$WORK_DIR/stage1.rom"
+        rm "$WORK_DIR/stage1.rom.tmp"
+
+        fd_region=$(get_layout_region "$WORK_DIR/oem/layout.txt" fd)
+        me_region=$(get_layout_region "$WORK_DIR/oem/layout.txt" me)
+
+        echo
+        echo "${CBOL}IMPORTANT!${CRST}"
+        echo "Let's check read-only regions again. I will now launch ${CBOL}flashrom -p internal${CRST}:"
+        echo
+        echo "${CYAN}$(strrepeat "-" 80)${CRST}"
+        sudo $FLASHROM $FLASHROM_ARGS -p internal:laptop=force_I_want_a_brick
+        echo "${CYAN}$(strrepeat "-" 80)${CRST}"
+        echo
+        echo "1: FD. If you see that ${CBOL}$fd_region${CRST} region is read-only, DO NOT CONTINUE!"
+        echo
+        echo "    a) If you resumed from S3, reboot and try again."
+        echo "    b) If the $fd_region region is read-only after cold boot, inform"
+        echo "       the developer and DO NOT CONTINUE."
+        echo ""
+        echo "2: ME. If you see that ${CBOL}$me_region${CRST} region is read-only, DO NOT CONTINUE!"
+        echo
+        echo -n "If none of the above is the case, type uppercase yes to flash coreboot: "
+
+        read ans
+        if [[ "$ans" != "YES" ]]; then
+            echo "Exiting."
+            exit
+        fi
+
+        flash "$WORK_DIR/stage1.rom" "$DIR/layout-stage1.txt"
+        echotitle "Done."
+
+        echo
+        echo "If you see three ${CBOL}Verifying flash... VERIFIED.${CRST} lines above, then you're lucky."
+        echo "Now, shutdown the laptop (DO NOT REBOOT, shut it down), wait a few seconds"
+        echo "and turn it on. Then, continue to stage2."
+        echo
+        echo "If you see any errors, DO NOT SHUTDOWN your laptop and DO NOT REBOOT!"
+        echo "Instead, contact the developer(s) and let them help you recover."
+        ;;
+
+    prepare-stage2)
+        if [[ "$STAGE2_USE_FULL_ME" == "0" ]]; then
+            patch_ifd "$WORK_DIR/stage2" "$DIR/layout-stage2.txt" stage2
+        else
+            echo "Nothing to prepare. Continue to config-stage2 or build-stage2."
+        fi
+        ;;
+
+    config-stage2)
+        prepare_config_stage2
+        echoinf "Config saved to ${CBOL}$WORK_DIR/config${CRST}"
+        ;;
+
+    build-stage2)
+        prepare_config_stage2
+        coreboot_check_board
+
+        pushd "$COREBOOT_PATH" >/dev/null
+        make distclean
+
+        patch_seabios
+
+        echotitle "Building coreboot..."
+        cp "$WORK_DIR/config" "$COREBOOT_PATH/.config"
+        make olddefconfig
+        make
+        postbuild_cbfs_add
+
+        popd >/dev/null
+        ;;
+
+    flash-stage2)
+        flash "$COREBOOT_PATH/build/coreboot.rom" $(get_stage2_layout)
+        echotitle "Done."
+
+        echo
+        echo "Congratulations!"
+        echo
+        echo "Now, shutdown the laptop again (again, DO NOT REBOOT, shut down), wait a few seconds,"
+        echo "power it up and enjoy coreboot."
+        ;;
+
+    flash-oem)
+        if [ ! -f "$WORK_DIR/oem/dump.bin" ]; then
+            echoerr "OEM dump $WORK_DIR/oem/dump.bin not found"
+            exit 1
+        fi
+
+        echo -n "Type uppercase YES to flash OEM firmware: "
+
+        read ans
+        if [[ "$ans" != "YES" ]]; then
+            echo "Exiting."
+            exit
+        fi
+
+        flash "$WORK_DIR/oem/dump.bin" "$WORK_DIR/oem/layout.txt"
+        echotitle "Done."
+
+        echo
+        echo "Now, shutdown the laptop (DO NOT REBOOT, shut down), wait a few seconds,"
+        echo "then power it up again."
+        ;;
+
+    *)
+        echoerr "Unrecognized action $ACTION"
+        exit 1
+        ;;
+esac
