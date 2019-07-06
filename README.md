@@ -15,7 +15,7 @@ As of time of writing, following models are supported in coreboot. Other models 
     # apt install bison build-essential curl flex git gnat libncurses5-dev m4 zlib1g-dev make libpci-dev libusb-1.0-0-dev
     ```
     On other distros package names might differ. Be sure to install **gnat** prior to building coreboot toolchain.
-    
+
 #### Building flashrom
 First of all, grab recent flashrom source tree and build it:
 ```
@@ -77,7 +77,7 @@ PR2: Warning: 0x00692000-0x01ffffff is read-only.
 ```
 Looks like a bug in Apple's firmware. Obviously it should always be read-only.
 
-Anyway, that means that after cold boot **`fd` and `me` regions are writable**, and that gives us around 1.5M of writable space. Since we can rewrite FD, we can write a new FD with custom layout. So **the idea is to repartition the flash chip** and flash new bios to a writable space. 
+Anyway, that means that after cold boot **`fd` and `me` regions are writable**, and that gives us around 1.5M of writable space. Since we can rewrite FD, we can write a new FD with custom layout. So **the idea is to repartition the flash chip** and flash new bios to a writable space.
 
 Let's write a new layout (I decided to use `0x00000-0xfffff` region for convenience):
 ```
@@ -194,7 +194,9 @@ Flash it:
 ```
 ./mmga flash-stage2
 ```
-If it's done and you again didn't see any errors, you have to **shutdown** the laptop again. DO NOT REBOOT, shut it down. It's even more important now: if you reboot, old FD will be used, the one that describes `bios` region as `0x21000-0xfffff`. And since you just flashed `bios` to `0x21000-0x7fffff`, this `0x21000-0xfffff` will most likely just contain `FF`s, so the laptop won't boot and will look like a brick. In that case you will need to press and hold power button for ~10 seconds to hard reset. To avoid all that, just do not reboot, shut it down.
+This may take a while, please don't interrupt and let it finish.
+
+If you again didn't see any errors after it's done, you have to **shutdown** the laptop again. DO NOT REBOOT, shut it down. It's even more important now: if you reboot, old FD will be used, the one that describes `bios` region as `0x21000-0xfffff`. And since you just flashed `bios` to `0x21000-0x7fffff`, this `0x21000-0xfffff` will most likely just contain `FF`s, so the laptop won't boot and will look like a brick. In that case you will need to press and hold power button for ~10 seconds to hard reset. To avoid all that, just do not reboot, shut it down.
 
 ## Misc
 
