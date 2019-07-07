@@ -554,7 +554,7 @@ case "$ACTION" in
             exit 1
         fi
 
-        echo -n "Type uppercase YES to flash OEM firmware: "
+        echo -n "Type uppercase yes to flash OEM firmware: "
 
         read ans
         if [[ "$ans" != "YES" ]]; then
