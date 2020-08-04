@@ -3,10 +3,14 @@
 
 #### Supported models
 As of time of writing, following models are supported in coreboot. Other models might be supported in future.
-* MacBook Air 4,2 (13'' Mid 2011) (`macbookair4_2`)
+* MacBook Air 4,2 (13'' Mid 2011) (`macbookair4_2`).<br>**Attention!** See the note below.
 * MacBook Air 5,2 (13'' Mid 2012) (`macbookair5_2`)
 * MacBook Pro 8,1 (13'' Early 2011) (`macbookpro8_1`)
 * MacBook Pro 10,1 (15'' Mid 2012 Retina) (`macbookpro10_1`)
+
+**MacBook Air 4,2** is the only model that hasn't been tested or ported by me, simply because I don't have it.
+There were reports that it doesn't work, and by the nature of those reports I suggest that coreboot port for MBA 4,2 is broken.
+Please don't try to use mmga on 4,2 until it's fixed.
 
 #### System requirements
 * Recent Linux booted with `iomem=relaxed` kernel parameter (needed for internal flashing to work);
