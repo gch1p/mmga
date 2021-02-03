@@ -2,7 +2,7 @@
 #
 # mmga: Make MacBook Great Again
 #
-# Copyright (C) 2019 Evgeny Zinoviev <me@ch1p.io>
+# Copyright (C) 2019, 2021 Evgeny Zinoviev <me@ch1p.io>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -20,7 +20,7 @@ trap 'onerror ${LINENO}' ERR
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 . $DIR/config.inc
 
-VERSION="0.1"
+VERSION="0.2"
 WORK_DIR="$DIR/work"
 
 CBOL=$(tput bold)
@@ -32,7 +32,7 @@ CYAN=$(tput setaf 6)
 declare -A BOARD_REFS=(
     [macbookair5_2]="refs/changes/04/32604/22"
     [macbookpro8_1]="refs/changes/51/33151/3"
-    [macbookpro10_1]="refs/changes/73/32673/22"
+    [macbookpro10_1]="refs/changes/73/32673/30"
 )
 
 onerror() {
@@ -195,8 +195,6 @@ config_write_payload() {
             echo "CONFIG_PAYLOAD_GRUB2=y" >> "$file"
         elif [ "$PAYLOAD" == "seabios" ]; then
             echo "CONFIG_PAYLOAD_SEABIOS=y" >> "$file"
-            echo "CONFIG_SEABIOS_REVISION=y" >> "$file"
-            echo "CONFIG_SEABIOS_REVISION_ID=\"macbook-fix\"" >> "$file"
         fi
     fi
 }
@@ -228,25 +226,6 @@ coreboot_check_board() {
         echoerr "Tree for $MODEL not found. Forgot to run fetch?"
         exit 1
     fi
-    popd >/dev/null
-}
-
-patch_seabios() {
-    if [[ "$PAYLOAD" != "seabios" ]]; then
-        return
-    fi
-    pushd "$COREBOOT_PATH/payloads/external/SeaBIOS" >/dev/null
-    echotitle "Patching SeaBIOS..."
-    make seabios
-    cd seabios
-    if [ $(git branch --list macbook-fix) ]; then
-        echotitle "SeaBIOS patch already in place, skipping..."
-        popd >/dev/null
-        return
-    fi
-    git checkout -b macbook-fix
-    patch -p1 < "$DIR/seabios-macbook-fix.patch"
-    git commit -am "Fix MacBook USB keyboard" --no-verify
     popd >/dev/null
 }
 
@@ -443,8 +422,6 @@ case "$ACTION" in
         pushd "$COREBOOT_PATH" >/dev/null
         make distclean
 
-        patch_seabios
-
         echotitle "Building coreboot..."
         cp "$WORK_DIR/config" "$COREBOOT_PATH/.config"
         make olddefconfig
@@ -525,8 +502,6 @@ case "$ACTION" in
 
         pushd "$COREBOOT_PATH" >/dev/null
         make distclean
-
-        patch_seabios
 
         echotitle "Building coreboot..."
         cp "$WORK_DIR/config" "$COREBOOT_PATH/.config"
