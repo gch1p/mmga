@@ -230,6 +230,9 @@ change the payload.
 Of course, in order to do that, you should backup the whole mmga directory after
 the completion of the first stage but **before** the reboot.
 
+**Attention!** Recent SeaBIOS versions break internal keyboard and touchpad on
+MacBooks, for now it's recommended to use GRUB until it's fixed.
+
 ### Configuration
 
 Before you start, you have to update variables the `config.inc` file:
