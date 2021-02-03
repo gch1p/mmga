@@ -14,7 +14,7 @@ might be supported in future.
 * MacBook Pro 10,1 (15'' Mid 2012 Retina) (`macbookpro10_1`)
 * MacBook Air 5,2 (13'' Mid 2012) (`macbookair5_2`)
 * MacBook Air 4,2 (13'' Mid 2011) (`macbookair4_2`).
-  
+
   **Attention!** This model hasn't been tested by me, simply because
   I don't have it. There were reports that it doesn't work, and by the nature of
   those reports I suggest that coreboot port for MBA 4,2 is somehow broken.
@@ -35,7 +35,7 @@ I'll add iMac 13,1 support later when it's fixed.
 
     If you plan to use GRUB2 as a payload:
     ```
-    # apt install libfreetype-dev unifont
+    # apt install libfreetype-dev unifont autoconf
     ```
 
     On other distros package names might differ. Be sure to install **gnat**
@@ -205,7 +205,7 @@ may lead to a brick. In that case, you should have a copy of your original ROM
 **on external drive**. Please make a backup of `work/oem/dump.bin` after
 running `mmga dump`, or just copy the whole mmga directory.
 
-These posts may be a little helpful if you ever need to flash externally: 
+These posts may be a little helpful if you ever need to flash externally:
 
 - [MacBook Air 5,2](https://ch1p.io/coreboot-mba52-flashing/)
 - [MacBook Pro 10,1](https://ch1p.io/coreboot-mbp101-flashing/)
