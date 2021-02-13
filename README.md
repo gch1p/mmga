@@ -10,19 +10,93 @@ do the same manually.
 As of time of writing, following devices are supported in coreboot. Other models
 might be supported in future.
 
-* MacBook Pro 8,1 (13'' Early 2011) (`macbookpro8_1`)
+* MacBook Pro 8,1 (13'' Early 2011) (`macbookpro8_1`)<br>
 * MacBook Pro 10,1 (15'' Mid 2012 Retina) (`macbookpro10_1`)
-* MacBook Air 5,2 (13'' Mid 2012) (`macbookair5_2`)
-* MacBook Air 4,2 (13'' Mid 2011) (`macbookair4_2`).
+  
+  **Attention!** Not all memory configurations are supported, see
+  [here](#ram-configurations).<br>
 
-  **Attention!** This model hasn't been tested by me, simply because
-  I don't have it. There were reports that it doesn't work, and by the nature of
-  those reports I suggest that coreboot port for MBA 4,2 is somehow broken.
-  Please don't try to use mmga on 4,2 until it's fixed or confirmed to work.
+* MacBook Air 5,2 (13'' Mid 2012) (`macbookair5_2`)
+
+  **Attention!** Not all memory configurations are supported, see
+  [here](#ram-configurations).<br>
+
+* MacBook Air 4,2 (13'' Mid 2011) (`macbookair4_2`).
+  
+  **Attention!** Not all memory configurations are supported, see
+  [here](#ram-configurations).
 
 iMac 13,1 is a candidate for support too, but [coreboot port](https://review.coreboot.org/c/coreboot/+/38883)
 for this device is not actively maintained at the moment and it may fail to build.
 I'll add iMac 13,1 support later when it's fixed.
+
+### RAM configurations
+
+Models with soldered RAM are sold with different memory modules, manufactured by 
+different manufacturers. Not all of them are supported currently.
+
+To determine which memory you have in your MacBook, you can use `inteltool`
+and [this script](https://github.com/gch1p/get_macbook_ramcfg). You need to run
+them on the target machine.
+
+First, [download coreboot](#stage1) and build `inteltool`:
+```console
+$ cd util/inteltool
+$ make -j4
+```
+
+Download the script and make it executable. Then run:
+```console
+$ sudo ./inteltool -g | /path/to/get_macbook_ramcfg -m MODEL
+```
+
+Replace `MODEL` with your MacBook model: `mbp101` for MacBook Pro 10,1 or `mba52`
+for MacBook Air 5,2 and MacBook Air 4,2.
+
+Then check the tables below.
+
+#### MacBook Pro 10,1
+
+| RAM configuration | Supported |
+| ------------------|-----------|
+| 4g_hynix_1600s    | 🚫 No     |
+| 1g_samsung_1600   | 🚫 No     |
+| 4g_samsung_1600s  | 🚫 No     |
+| 1g_hynix_1600     | 🚫 No     |
+| 4g_elpida_1600s   | 🚫 No     |
+| 2g_samsung_1600   | 🚫 No     |
+| 2g_samsung_1333   | 🚫 No     |
+| 2g_hynix_1600     | ✅ Yes    |
+| 4g_samsung_1600   | 🚫 No     |
+| 4g_hynix_1600     | ✅ Yes    |
+| 2g_elpida_1600s   | 🚫 No     |
+| 2g_elpida_1600    | 🚫 No     |
+| 4g_elpida_1600    | 🚫 No     |
+| 2g_samsung_1600s  | 🚫 No     |
+| 2g_hynix_1600s    | 🚫 No     |
+
+#### MacBook Air 5,2
+
+| RAM configuration | Supported |
+|-------------------|-----------|
+| 4g_hynix          | ✅ Yes    |
+| 8g_hynix          | 🚫 No     |
+| 4g_samsung        | 🚫 No     |
+| 8g_samsung        | 🚫 No     |
+| 4g_elpida         | 🚫 No     |
+| 8g_elpida         | 🚫 No     |
+
+#### MacBook Air 4,2
+
+In progress.
+
+---
+
+If your found out that your MacBook's memory is not supported, you can help 
+supporting it. Run `sudo inteltool -m`, save output to a text file and create a
+new issue specifying your MacBook model, memory configuration name with the text
+file attached.
+
 
 ### System requirements
 
