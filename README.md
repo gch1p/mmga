@@ -50,8 +50,8 @@ Download the script and make it executable. Then run:
 $ sudo ./inteltool -g | /path/to/get_macbook_ramcfg -m MODEL
 ```
 
-Replace `MODEL` with your MacBook model: `mbp101` for MacBook Pro 10,1 or `mba52`
-for MacBook Air 5,2 and MacBook Air 4,2.
+Replace `MODEL` with your MacBook model: `mbp101` for MacBook Pro 10,1, `mba52`
+for MacBook Air 5,2 and `mba42` for MacBook Air 4,2.
 
 Then check the tables below.
 
@@ -88,7 +88,14 @@ Then check the tables below.
 
 #### MacBook Air 4,2
 
-In progress.
+| RAM configuration | Supported |
+|-------------------|-----------|
+| 2g_hynix          | Unknown   |
+| 4g_hynix          | Unknown   |
+| 2g_samsung        | Unknown   |
+| 4g_samsung        | Unknown   |
+| 2g_micron         | Unknown   |
+| 4g_elpida         | Unknown   |
 
 ---
 
