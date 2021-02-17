@@ -90,12 +90,12 @@ Then check the tables below.
 
 | RAM configuration | Supported |
 |-------------------|-----------|
-| 2g_hynix          | Unknown   |
-| 4g_hynix          | Unknown   |
-| 2g_samsung        | Unknown   |
-| 4g_samsung        | Unknown   |
-| 2g_micron         | Unknown   |
-| 4g_elpida         | Unknown   |
+| 2g_hynix          | 🚫 No     |
+| 4g_hynix          | 🚫 No     |
+| 2g_samsung        | 🚫 No     |
+| 4g_samsung        | ✅ Yes    |
+| 2g_micron         | 🚫 No     |
+| 4g_elpida         | 🚫 No     |
 
 ---
 
