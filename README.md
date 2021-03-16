@@ -81,7 +81,7 @@ Then check the tables below.
 |-------------------|-----------|
 | 4g_hynix          | ✅ Yes    |
 | 8g_hynix          | 🚫 No     |
-| 4g_samsung        | 🚫 No     |
+| 4g_samsung        | ✅ Yes    |
 | 8g_samsung        | 🚫 No     |
 | 4g_elpida         | 🚫 No     |
 | 8g_elpida         | 🚫 No     |

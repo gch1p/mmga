@@ -30,7 +30,7 @@ CGRN=$(tput setaf 2)
 CYAN=$(tput setaf 6)
 
 declare -A BOARD_REFS=(
-    [macbookair5_2]="refs/changes/04/32604/22"
+    [macbookair5_2]="refs/changes/04/32604/33"
     [macbookpro8_1]="refs/changes/51/33151/3"
     [macbookpro10_1]="refs/changes/73/32673/30"
 )
