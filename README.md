@@ -1,5 +1,10 @@
 # mmga: Make MacBook Great Again
 
+> **WARNING!** Please DO NOT use mmga! If you want coreboot on your macbook
+> and it's listed as supported, contact me by email.
+
+---
+
 **mmga** is a script to help flashing coreboot on some MacBook Air and Pro
 models without using external SPI programmer. See
 [this blog post](https://ch1p.io/coreboot-macbook-internal-flashing/) on how to
